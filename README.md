@@ -7,7 +7,7 @@ CLI para criar tabelas no BigQuery a partir de arquivos CSV e fazer upload de da
 - Python 3.6+
 - Bibliotecas:
   ```bash
-  pip install pandas google-cloud-bigquery
+  pip install pandas google-cloud-bigquery typer
   ```
 - Credenciais do Google Cloud Platform (JSON)
 - Permissões necessárias no BigQuery:
@@ -22,7 +22,7 @@ CLI para criar tabelas no BigQuery a partir de arquivos CSV e fazer upload de da
 chmod +x script.py
 
 # Instale as dependências
-pip install pandas google-cloud-bigquery
+pip install -r requirements.txt
 ```
 
 ## 📖 Uso Básico
@@ -49,7 +49,7 @@ python script.py [opções]
 | `--replace` | Usa `CREATE OR REPLACE TABLE` | Não |
 | `--print-sql` | Apenas imprime o SQL sem executar | Não |
 
-\* Você pode usar `--table-id` OU a combinação `--dataset` + `--table-name`  
+\* Você pode usar `--table-id` OU a combinação `--dataset` + `--table-name`
 \*\* Se não informado, usa as credenciais padrão do ambiente
 
 ## 💡 Exemplos de Uso

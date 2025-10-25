@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-import argparse
+import typer
+from typing_extensions import Annotated
 import os
 import sys
 from typing import List, Tuple, Optional
@@ -108,75 +109,95 @@ def upload_to_bigquery(
     return int(rows) if rows is not None else int(len(df_filtered))
 
 
-def main():
-    parser = argparse.ArgumentParser(
-        description="CLI para criar tabela no BigQuery a partir de um CSV (colunas STRING) e/ou enviar dados."
-    )
-    parser.add_argument("-c", "--csv", help="Caminho para o CSV")
-    parser.add_argument(
-        "-t", "--table-id", help="Tabela no formato [project.]dataset.table"
-    )
-    parser.add_argument(
-        "--project-id", help="Project ID (usado se table-id não inclui o project)"
-    )
-    parser.add_argument("--dataset", help="Dataset (caso não use --table-id completo)")
-    parser.add_argument("--table-name", help="Nome da tabela (caso não use --table-id)")
-    parser.add_argument(
-        "--mode",
-        choices=["create", "upload", "both"],
-        default="both",
-        help="Ação a realizar: create, upload ou both (padrão: both)",
-    )
-    parser.add_argument("--sep", default=";", help="Separador do CSV (padrão: ;)")
-    parser.add_argument(
-        "--encoding", default="utf-8-sig", help="Encoding do CSV (padrão: utf-8-sig)"
-    )
-    parser.add_argument(
-        "--credentials", help="Caminho para o JSON de credenciais do GCP"
-    )
-    parser.add_argument(
-        "--replace",
-        action="store_true",
-        help="Usa CREATE OR REPLACE TABLE ao criar a tabela",
-    )
-    parser.add_argument(
-        "--print-sql",
-        action="store_true",
-        help="Apenas imprime o SQL de criação (não executa)",
-    )
+def main(
+    csv: Annotated[
+        Optional[str], typer.Option("-c", "--csv", help="Caminho para o CSV")
+    ] = None,
+    table_id: Annotated[
+        Optional[str],
+        typer.Option(
+            "-t", "--table-id", help="Tabela no formato [project.]dataset.table"
+        ),
+    ] = None,
+    project_id: Annotated[
+        Optional[str],
+        typer.Option(help="Project ID (usado se table-id não inclui o project)"),
+    ] = None,
+    dataset: Annotated[
+        Optional[str], typer.Option(help="Dataset (caso não use --table-id completo)")
+    ] = None,
+    table_name: Annotated[
+        Optional[str], typer.Option(help="Nome da tabela (caso não use --table-id)")
+    ] = None,
+    mode: Annotated[
+        str, typer.Option(help="Ação a realizar: create, upload ou both (padrão: both)")
+    ] = "both",
+    sep: Annotated[str, typer.Option(help="Separador do CSV (padrão: ;)")] = ";",
+    encoding: Annotated[
+        str, typer.Option(help="Encoding do CSV (padrão: utf-8-sig)")
+    ] = "utf-8-sig",
+    credentials: Annotated[
+        Optional[str], typer.Option(help="Caminho para o JSON de credenciais do GCP")
+    ] = None,
+    replace: Annotated[
+        bool,
+        typer.Option("--replace", help="Usa CREATE OR REPLACE TABLE ao criar a tabela"),
+    ] = False,
+    print_sql: Annotated[
+        bool, typer.Option(help="Apenas imprime o SQL de criação (não executa)")
+    ] = False,
+):
+    """
+    CLI para criar tabela no BigQuery a partir de um CSV (colunas STRING) e/ou enviar dados.
+    """
 
-    args = parser.parse_args()
+    # Agora, em vez de 'args.csv', usamos a variável 'csv'
+    # Em vez de 'args.credentials', usamos a variável 'credentials'
+    # etc.
 
-    if args.credentials:
-        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = args.credentials
+    if credentials:
+        os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = credentials
 
     # Validação do CSV conforme o modo
-    if args.mode in ("create", "upload", "both") and not args.csv:
-        parser.error("--csv é obrigatório para o modo selecionado.")
+    # A validação de 'choices' do argparse se foi, então podemos adicionar uma.
+    # E a validação de obrigatoriedade do CSV.
+
+    valid_modes = ["create", "upload", "both"]
+    if mode not in valid_modes:
+        print(f"❌ Erro: --mode deve ser um de {valid_modes}")
+        raise typer.Exit(code=1)
+
+    if mode in ("create", "upload", "both") and not csv:
+        print("❌ Erro: --csv é obrigatório para o modo selecionado.")
+        # Usamos typer.Exit() em vez de parser.error()
+        raise typer.Exit(code=1)
 
     # Cria cliente (usa project passado ou o padrão do ambiente)
     try:
-        client = bigquery.Client(project=args.project_id)
+        # Usamos a variável 'project_id'
+        client = bigquery.Client(project=project_id)
     except Exception as e:
         print(f"Erro ao criar cliente BigQuery: {e}")
         sys.exit(1)
 
     # Normaliza project/dataset/table
-    default_project = args.project_id or client.project
+    default_project = project_id or client.project
     try:
-        if args.table_id:
+        # Usamos as variáveis 'table_id', 'dataset', 'table_name'
+        if table_id:
             project_id, dataset_id, table_name = parse_table_id_using_defaults(
-                args.table_id,
+                table_id,
                 default_project=default_project,
-                default_dataset=args.dataset,
+                default_dataset=dataset,
             )
         else:
-            if not args.dataset or not args.table_name:
-                parser.error("Informe --table-id OU (--dataset e --table-name).")
+            if not dataset or not table_name:
+                print("❌ Erro: Informe --table-id OU (--dataset e --table-name).")
+                raise typer.Exit(code=1)  # <- Substitui parser.error
             project_id, dataset_id, table_name = (
                 default_project,
-                args.dataset,
-                args.table_name,
+                dataset,
+                table_name,
             )
     except ValueError as e:
         print(f"❌ {e}")
@@ -185,23 +206,23 @@ def main():
     full_table_id = f"{project_id}.{dataset_id}.{table_name}"
 
     # CREATE
-    if args.mode in ("create", "both"):
+    if mode in ("create", "both"):
         try:
-            columns = get_columns_from_csv(
-                args.csv, sep=args.sep, encoding=args.encoding
-            )
+            # Usamos as variáveis 'csv', 'sep', 'encoding'
+            columns = get_columns_from_csv(csv, sep=sep, encoding=encoding)
         except Exception as e:
             print(f"❌ Erro ao ler cabeçalho do CSV: {e}")
             sys.exit(3)
 
+        # Usamos a variável 'replace'
         sql = generate_create_table_sql(
-            project_id, dataset_id, table_name, columns, replace=args.replace
+            project_id, dataset_id, table_name, columns, replace=replace
         )
         print("🧱 SQL de criação da tabela:")
         print(sql)
         print()
 
-        if not args.print_sql:
+        if not print_sql:  # Usamos a variável 'print_sql'
             try:
                 run_query(client, sql)
                 print(f"✅ Tabela `{full_table_id}` criada com sucesso.")
@@ -213,10 +234,10 @@ def main():
                 sys.exit(5)
 
     # UPLOAD
-    if args.mode in ("upload", "both"):
+    if mode in ("upload", "both"):
         if not table_exists(client, full_table_id):
             print(f"❌ A tabela `{full_table_id}` não existe.")
-            if args.mode == "both":
+            if mode == "both":
                 print(
                     "Observação: era esperado que a criação tivesse ocorrido antes do upload."
                 )
@@ -225,7 +246,8 @@ def main():
             sys.exit(6)
 
         try:
-            df = pd.read_csv(args.csv, sep=args.sep, encoding=args.encoding)
+            # Usamos 'csv', 'sep', 'encoding'
+            df = pd.read_csv(csv, sep=sep, encoding=encoding)
         except Exception as e:
             print(f"❌ Erro ao ler o CSV: {e}")
             sys.exit(7)
@@ -242,4 +264,4 @@ def main():
 
 
 if __name__ == "__main__":
-    main()
+    typer.run(main)

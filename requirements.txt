@@ -1,0 +1,4 @@
+pandas
+typer
+typing_extensions
+google-cloud-bigquery
